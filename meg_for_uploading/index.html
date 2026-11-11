@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>巡り帖 — 店舗とポケふた</title>
+<meta name="theme-color" content="#f6f2ea">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="巡り帖+">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js" integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:oklch(0.972 0.01 85);--paper2:oklch(0.94 0.016 85);--card:oklch(0.99 0.006 85);
+  --ink:oklch(0.27 0.02 150);--ink2:oklch(0.47 0.02 150);--ink3:oklch(0.62 0.015 120);
+  --line:oklch(0.87 0.016 85);--green:oklch(0.46 0.09 155);--green-soft:oklch(0.93 0.03 155);
+  --shu:oklch(0.55 0.15 32);--shu-soft:oklch(0.94 0.03 32);
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --safe-top:calc(env(safe-area-inset-top,0px) + 12px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;height:100dvh;overscroll-behavior:none;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'Zen Kaku Gothic New',system-ui,sans-serif;font-size:14px}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+a{color:var(--green)}a:hover{color:var(--ink)}
+#app{position:absolute;inset:0;overflow:hidden}
+#map{position:absolute;inset:0;background:var(--paper2)}
+#map.simple{background:oklch(0.925 0.018 200)}
+.leaflet-tile-pane{filter:saturate(.35) sepia(.18) contrast(.96) brightness(1.02)}
+#map.transit .leaflet-tile-pane{filter:grayscale(1) contrast(.85) brightness(1.08);opacity:.7}
+.t-hint{position:absolute;left:50%;top:calc(var(--safe-top) + 178px);transform:translateX(-50%);z-index:480;background:var(--card);border:1px solid var(--line);color:var(--ink2);font-size:11.5px;padding:6px 12px;border-radius:14px;box-shadow:0 2px 8px oklch(0.3 0.02 150/.12);transition:opacity .25s;pointer-events:none;white-space:nowrap;opacity:0}
+.leaflet-tooltip.st-label{background:transparent;border:0;box-shadow:none;padding:0;font-weight:700;font-size:11px;color:#2b2f33;text-shadow:0 0 2px #fff,0 0 2px #fff,0 0 3px #fff}
+.leaflet-tooltip.st-label::before{display:none}
+.leaflet-rail-pane{pointer-events:none}
+.leaflet-container{font-family:inherit}
+.leaflet-control-attribution{font-size:9px!important;background:color-mix(in oklch,var(--paper) 80%,transparent)!important}
+[data-v="a"] .leaflet-bottom,[data-v="b"] .leaflet-bottom{bottom:var(--attr-b,0)}
+[data-v="c"] .leaflet-bottom{bottom:178px}
+
+/* top controls */
+.top{position:absolute;left:0;right:0;top:0;z-index:500;padding:var(--safe-top) 14px 10px;display:flex;flex-direction:column;gap:10px}
+[data-v="a"] .top,[data-v="b"] .top{background:var(--paper);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.brand h1{margin:0;font-size:20px;font-weight:900;letter-spacing:.04em}
+.brand h1 small{font-size:11px;font-weight:500;color:var(--ink2);margin-left:8px;letter-spacing:0}
+.loc{font-size:11px;color:var(--ink2);font-family:var(--mono);white-space:nowrap}
+.ctrls{display:flex;gap:6px;align-items:center;overflow-x:auto;scrollbar-width:none}
+.ctrls::-webkit-scrollbar{display:none}
+.chip{flex:none;height:34px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:17px;border:1px solid var(--line);background:var(--card);font-size:13px;font-weight:500;position:relative;transition:background .15s,border-color .15s}
+.chip select{appearance:none;border:0;background:transparent;font-weight:700;padding-right:14px;outline:none;cursor:pointer}
+.chip .caret{position:absolute;right:11px;width:6px;height:6px;border-right:1.5px solid var(--ink2);border-bottom:1.5px solid var(--ink2);transform:rotate(45deg) translateY(-2px);pointer-events:none}
+.chip.on{background:var(--green);border-color:var(--green);color:var(--card)}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.chip.on .dot{background:var(--card)}
+.chip .sdot{width:10px;height:10px;border-radius:50%;background:conic-gradient(#8CC63F 0 50%,var(--green) 0)}
+.chip b{font-weight:500}
+.chip.got{background:#8CC63F;border-color:#7AB32E;color:oklch(0.25 0.04 140)}.chip.got .sdot{background:#8CC63F;box-shadow:0 0 0 1.5px oklch(0.25 0.04 140)}
+.chip.not{background:var(--ink);border-color:var(--ink);color:var(--card)}.chip.not .sdot{background:var(--green);box-shadow:0 0 0 1.5px var(--card)}
+.legend{position:absolute;left:12px;right:64px;z-index:450;display:flex;flex-wrap:wrap;gap:4px 10px;width:max-content;max-width:calc(100% - 76px);padding:2px 6px;border-radius:14px;background:var(--card);border:1px solid var(--line);box-shadow:0 2px 8px oklch(0.3 0.02 150/.12);font-size:11px;color:var(--ink2)}
+.legend button{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);height:28px;padding:0 4px;border-radius:8px}.legend button:hover{background:var(--paper2)}.legend button.off{color:var(--ink3);text-decoration:line-through;opacity:.5}.legend button.off i{box-shadow:0 0 0 1.5px var(--line)!important;background:transparent!important}.legend i{width:9px;height:9px;border-radius:50%;box-shadow:0 0 0 1.5px #fff,0 0 0 2.5px var(--line)}
+[data-v="a"] .legend,[data-v="b"] .legend{top:calc(var(--safe-top) + 168px)}[data-v="c"] .legend{top:212px}
+.seg{flex:none;display:flex;height:34px;padding:3px;border-radius:17px;background:var(--paper2);border:1px solid var(--line)}
+.seg button{flex:1;padding:0 11px;border-radius:14px;font-size:12px;font-weight:500;color:var(--ink2)}
+.seg button.on{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 1px 2px oklch(0.3 0.02 150/.15)}
+[data-v="c"] .brand{background:var(--card);border-radius:22px;padding:10px 14px;box-shadow:0 2px 10px oklch(0.3 0.02 150/.14);border:1px solid var(--line)}
+[data-v="c"] .chip,[data-v="c"] .seg{box-shadow:0 2px 8px oklch(0.3 0.02 150/.12)}
+.bookbtn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 6px;border-radius:15px;background:var(--shu-soft);color:var(--shu);font-weight:700;font-size:12px}
+.bookbtn i{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--shu);display:grid;place-items:center;font-style:normal;font-size:10px;font-family:var(--mono)}
+
+.fab{position:absolute;right:12px;z-index:450;width:44px;height:44px;border-radius:22px;background:var(--card);border:1px solid var(--line);box-shadow:0 2px 8px oklch(0.3 0.02 150/.15);display:grid;place-items:center}
+.fab span{width:14px;height:14px;border-radius:50%;border:2px solid var(--ink);position:relative}
+.fab span::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--ink)}
+[data-v="a"] .fab,[data-v="b"] .fab{top:calc(var(--safe-top) + 168px)}
+.src{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10.5px;color:var(--ink3);font-family:var(--mono);margin-top:-2px}
+.src span{display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src span::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--ink3)}
+.src.live span::before{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+.src.busy span::before{background:oklch(0.7 0.13 75)}
+.src button{flex:none;color:var(--green);font-weight:500;font-family:var(--mono);font-size:10.5px}
+.src button:disabled{color:var(--ink3)}
+[data-v="c"] .fab{top:212px}
+
+/* sheet (a,b) */
+.sheet{position:absolute;left:0;right:0;bottom:calc(56px + env(safe-area-inset-bottom,0px));z-index:600;background:var(--paper);border-radius:22px 22px 0 0;border:1px solid var(--line);border-bottom:0;box-shadow:0 -4px 20px oklch(0.3 0.02 150/.12);display:flex;flex-direction:column;transition:height .32s cubic-bezier(.2,.8,.2,1)}
+.sheet[data-s="min"]{height:62px}.sheet[data-s="min"] .list{visibility:hidden}.sheet.drag{transition:none}.sheet[data-s="peek"]{height:132px}.sheet[data-s="half"]{height:44%}.sheet[data-s="full"]{height:calc(100% - var(--safe-top) - 206px)}
+.handle{padding:9px 0 4px;display:grid;place-items:center;width:100%}
+.handle::before{content:"";width:38px;height:4px;border-radius:2px;background:var(--line)}
+.sh-head{display:flex;align-items:baseline;justify-content:space-between;padding:4px 18px 10px;border-bottom:1px dashed var(--line)}
+.sh-head b{font-size:16px;font-weight:900}
+.sh-head span{font-size:11px;color:var(--ink2);font-family:var(--mono)}
+.list{overflow-y:auto;flex:1;padding:4px 0 12px}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 18px;width:100%;text-align:left;border-bottom:1px solid var(--line)}
+.row:hover{background:var(--paper2)}
+.row .nm{font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px;min-width:0}
+.row .nm em{font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .ds{font-family:var(--mono);font-size:13px;font-weight:500;text-align:right}
+.row .st{font-size:12px;color:var(--ink2)}
+.row .wk{font-size:11px;color:var(--ink3);text-align:right;font-family:var(--mono)}
+.mini-stamp{flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--shu);color:var(--shu);font-size:9px;display:grid;place-items:center;font-weight:900;transform:rotate(-10deg)}
+.badge{display:inline-flex;align-items:center;gap:5px}
+.badge::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--green)}
+.badge.soon::before{background:oklch(0.7 0.13 75)}
+.badge.closed,.badge.unknown{color:var(--ink3)}.badge.unknown::before{background:var(--line)}.badge.unknown b{color:var(--ink3);font-weight:500}.badge.closed::before{background:var(--ink3)}
+.badge b{color:var(--green);font-weight:700}.badge.soon b{color:oklch(0.55 0.13 65)}.badge.closed b{color:var(--ink2)}
+.empty{padding:40px 24px;text-align:center;color:var(--ink2);font-size:13px}
+
+/* tabs */
+.tabs{position:absolute;left:0;right:0;bottom:0;height:calc(56px + env(safe-area-inset-bottom,0px));z-index:700;background:var(--paper);border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;font-weight:500;color:var(--ink3)}
+.tabs button i{width:22px;height:22px;border-radius:6px;border:1.8px solid currentColor;display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:900}
+.tabs button.t-book i{border-radius:50%}
+.tabs button.on{color:var(--ink)}
+.tabs button.on.t-book{color:var(--shu)}
+
+/* cards (c) */
+.cards{position:absolute;left:0;right:0;bottom:22px;z-index:600;display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:6px 24px 10px;scrollbar-width:none}
+.cards::-webkit-scrollbar{display:none}
+.ticket{flex:none;width:300px;height:142px;scroll-snap-align:center;display:grid;grid-template-columns:1fr 86px;background:var(--card);border-radius:14px;border:1px solid var(--line);box-shadow:0 4px 14px oklch(0.3 0.02 150/.16);text-align:left;position:relative;transition:transform .2s,box-shadow .2s}
+.ticket.cur{transform:translateY(-4px);box-shadow:0 8px 22px oklch(0.3 0.02 150/.22);border-color:var(--green)}
+.ticket .main{padding:14px 14px 12px 16px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.ticket .pf{font-family:var(--mono);font-size:10px;color:var(--ink3);letter-spacing:.06em}
+.ticket .nm{font-weight:900;font-size:16px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ticket .st{font-size:12px;color:var(--ink2);margin-top:auto}
+.ticket .stub{border-left:2px dashed var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;position:relative;background:var(--paper)}
+.ticket .stub::before,.ticket .stub::after{content:"";position:absolute;left:-9px;width:16px;height:16px;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.ticket .stub::before{top:-9px;background:oklch(0.95 0.01 85)}.ticket .stub::after{bottom:-9px;background:oklch(0.95 0.01 85)}
+.ticket .km{font-family:var(--mono);font-weight:500;font-size:18px}
+.ticket .wk{font-size:10px;color:var(--ink2)}
+.ticket .ring{width:46px;height:46px;border-radius:50%;border:1.5px dashed var(--ink3);display:grid;place-items:center;font-size:10px;color:var(--ink3)}
+.ticket .ring.done{border:2px solid var(--shu);color:var(--shu);font-weight:900;font-size:12px;transform:rotate(-12deg);box-shadow:inset 0 0 0 3px var(--card),inset 0 0 0 4px var(--shu)}
+
+/* detail */
+.detail{position:absolute;left:8px;right:8px;bottom:8px;z-index:900;background:var(--card);border-radius:24px;border:1px solid var(--line);box-shadow:0 10px 40px oklch(0.3 0.02 150/.28);padding:18px 18px 18px;transform:translateY(calc(100% + 24px));visibility:hidden;pointer-events:none;transition:transform .34s cubic-bezier(.2,.8,.2,1),visibility 0s .34s}
+.detail.show{transform:none;visibility:visible;pointer-events:auto;transition:transform .34s cubic-bezier(.2,.8,.2,1)}
+.dt-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.dt-pf{font-family:var(--mono);font-size:10.5px;color:var(--ink3);letter-spacing:.08em}
+.dt-nm{margin:4px 0 0;font-size:21px;font-weight:900;line-height:1.25;text-wrap:pretty}
+.x{flex:none;width:34px;height:34px;border-radius:17px;background:var(--paper2);position:relative}
+.x::before,.x::after{content:"";position:absolute;left:10px;right:10px;top:16px;height:2px;background:var(--ink2);transform:rotate(45deg)}
+.x::after{transform:rotate(-45deg)}
+.dt-grid{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:14px 0 16px;font-size:13px}
+.dt-grid dt{color:var(--ink3);font-size:11px;padding-top:2px}
+.dt-grid dd{margin:0}
+.dt-grid .mono{font-family:var(--mono)}
+.dt-act{display:flex;align-items:center;gap:14px;border-top:1px dashed var(--line);padding-top:14px;min-height:112px}
+.press{flex:1;height:52px;border-radius:26px;background:var(--green);color:var(--card);font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:10px}
+.press:hover{filter:brightness(1.06)}
+.press i{width:22px;height:22px;border-radius:50%;border:2px solid currentColor;opacity:.8}
+.dt-done{flex:1;display:flex;flex-direction:column;gap:6px}
+.dt-done b{font-size:15px}
+.dt-done span{font-size:12px;color:var(--ink2)}
+.dt-done button{align-self:flex-start;font-size:12px;color:var(--ink3);text-decoration:underline;text-underline-offset:3px}
+
+/* stamp */
+.stamp{flex:none;width:96px;height:96px;border-radius:50%;border:2.5px solid var(--shu);color:var(--shu);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;padding:10px;box-shadow:inset 0 0 0 4px var(--card),inset 0 0 0 5.5px var(--shu);position:relative;mix-blend-mode:multiply}
+.stamp .s1{font-size:9px;font-weight:700;letter-spacing:.1em}
+.stamp .s2{font-size:12px;font-weight:900;line-height:1.15;max-width:66px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.stamp .s3{font-family:var(--mono);font-size:8.5px;border-top:1px solid currentColor;padding-top:2px;margin-top:1px}
+.stamp.sm{width:84px;height:84px;padding:8px}
+.stamp.sm .s2{font-size:11px;max-width:58px}
+.stamp.pop{animation:pop .5s cubic-bezier(.3,1.6,.5,1) both}
+@keyframes pop{0%{transform:scale(1.9) rotate(-30deg);opacity:0}60%{opacity:1}100%{transform:scale(1) rotate(var(--r,-8deg));opacity:1}}
+
+/* book */
+.book{position:absolute;inset:0;z-index:650;background:var(--paper);background-image:radial-gradient(oklch(0.86 0.016 85) 1px,transparent 1px);background-size:16px 16px;overflow-y:auto;padding:calc(var(--safe-top) + 4px) 0 100px;display:none}
+.book.show{display:block}
+[data-v="c"] .book{z-index:800;padding-bottom:40px}
+.bk-hd{padding:6px 20px 0;display:flex;justify-content:space-between;align-items:center}
+.bk-hd h2{margin:0;font-size:26px;font-weight:900;letter-spacing:.06em}
+.bk-sub{padding:2px 20px 0;font-size:12px;color:var(--ink2)}
+.bk-prog{margin:16px 16px 0;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.bk-prog .k{font-size:11px;color:var(--ink3)}
+.bk-prog .v{font-family:var(--mono);font-size:28px;font-weight:500;line-height:1.1;margin-top:2px}
+.bk-prog .v small{font-size:12px;color:var(--ink3)}
+.bk-prog .bar{grid-column:1/-1;height:6px;border-radius:3px;background:var(--paper2);overflow:hidden}
+.bk-prog .bar i{display:block;height:100%;background:var(--shu);border-radius:3px}
+.bk-sec{padding:22px 20px 8px;display:flex;justify-content:space-between;align-items:baseline}
+.bk-sec b{font-size:14px;font-weight:900}
+.bk-sec span{font-size:11px;color:var(--ink3);font-family:var(--mono)}
+.stamps{display:flex;gap:6px;overflow-x:auto;padding:6px 16px 6px;scrollbar-width:none}
+.stamps::-webkit-scrollbar{display:none}
+.stamps button{flex:none;padding:4px}
+.region{padding:12px 20px 4px;font-size:11px;color:var(--ink2);font-weight:700;letter-spacing:.1em}
+.pgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:0 16px}
+.pc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 8px 7px;text-align:left;display:flex;flex-direction:column;gap:3px;position:relative;min-height:58px;transition:border-color .15s}
+.pc:hover{border-color:var(--green)}
+.pc b{font-size:13px;font-weight:700}
+.pc span{font-family:var(--mono);font-size:10px;color:var(--ink3)}
+.pc .pb{height:3px;border-radius:2px;background:var(--paper2);margin-top:auto;overflow:hidden}
+.pc .pb i{display:block;height:100%;background:var(--shu)}
+.pc.got{border-color:color-mix(in oklch,var(--shu) 40%,var(--line))}
+.pc.got::after{content:attr(data-n);position:absolute;right:6px;top:6px;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--shu);color:var(--shu);font-size:9px;font-weight:900;display:grid;place-items:center;transform:rotate(-12deg);font-family:var(--mono)}
+[data-v="b"] .pgrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+[data-v="b"] .pc{min-height:76px;padding:10px}
+[data-v="b"] .pc b{font-size:15px}
+[data-v="b"] .pc.got::after{width:26px;height:26px;font-size:11px;right:8px;top:8px}
+
+.toast{position:absolute;left:50%;top:calc(var(--safe-top) + 70px);transform:translate(-50%,-10px);z-index:1000;background:var(--ink);color:var(--paper);font-size:12px;padding:9px 14px;border-radius:18px;opacity:0;pointer-events:none;transition:.25s;width:max-content;max-width:86%;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+.chip .lydots{display:flex;gap:2px}.chip .lydots:empty::before{content:"";width:12px;height:12px;border:1.5px solid var(--ink2);border-radius:3px;transform:rotate(45deg) scale(.8)}
+.chip .lydots i{width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 1.5px var(--card)}
+#lyBtn.on{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.lyp{position:absolute;right:10px;left:10px;top:calc(var(--safe-top) + 160px);z-index:760;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 10px 30px oklch(0.3 0.02 150/.22);padding:14px 16px 12px;display:none}
+.lyp.show{display:block}
+.lyp-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}.lyp-h b{font-size:15px;font-weight:900}
+.lyp-g{font-size:11px;font-weight:700;color:var(--ink2);letter-spacing:.08em;padding:10px 0 4px;display:flex;justify-content:space-between}.lyp-g span{font-weight:500;letter-spacing:0;color:var(--ink3)}
+.lyr{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;min-height:52px;border-top:1px solid var(--line);cursor:pointer}
+.lyr>i{width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 2px #fff,0 0 0 3px var(--line)}
+.lyr span{display:flex;flex-direction:column;gap:2px;min-width:0}.lyr b{font-size:14px;font-weight:700}.lyr small{font-size:11px;color:var(--ink3);font-family:var(--mono);min-height:13px}
+.lyr input{position:absolute;opacity:0;pointer-events:none}
+.lyr em{width:44px;height:26px;border-radius:13px;background:var(--paper2);border:1px solid var(--line);position:relative;transition:background .15s}
+.lyr em::after{content:"";position:absolute;left:2px;top:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px oklch(0.3 0.02 150/.3);transition:transform .18s}
+.lyr input:checked+em{background:var(--green);border-color:var(--green)}.lyr input:checked+em::after{transform:translateX(18px)}
+.lyp-f{font-size:10px;color:var(--ink3);line-height:1.5;padding-top:10px;border-top:1px dashed var(--line)}
+.spot-pop .leaflet-popup-content-wrapper{border-radius:14px;box-shadow:0 6px 20px oklch(0.3 0.02 150/.25)}.spot-pop .leaflet-popup-content{margin:12px 14px;font-family:inherit;min-width:180px}
+.sp-k{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--ink2);font-weight:700}.sp-k i{width:8px;height:8px;border-radius:50%}
+.sp-n{font-size:14px;font-weight:900;margin:3px 0 2px;color:var(--ink)}.sp-sub{font-size:11px;color:var(--ink3)}
+.sp-av{display:flex;gap:14px;margin:8px 0 2px}.sp-av span{display:flex;align-items:baseline;gap:4px;font-size:11px;color:var(--ink2)}.sp-av b{font-family:var(--mono);font-size:20px;color:var(--ink);font-weight:500}
+.sp-a{display:inline-block;margin-top:8px;font-size:12px;font-weight:700}
+
+.fab.lyfab{flex-direction:column;gap:2px;display:flex;align-items:center;justify-content:center}
+.fab.lyfab b{font-size:9px;font-weight:700;line-height:1}
+.fab.lyfab .lydots{min-height:12px;align-items:center}
+[data-v="a"] .fab.lyfab,[data-v="b"] .fab.lyfab{top:calc(var(--safe-top) + 220px);width:44px;height:48px;border-radius:14px}
+[data-v="c"] .fab.lyfab{top:calc(var(--safe-top) + 210px);width:44px;height:48px;border-radius:14px}
+#lyBtn.on.lyfab{background:var(--ink);border-color:var(--ink);color:var(--card)}
+
+.spot-pop .leaflet-popup-content{min-width:220px}
+.spot-pop a.leaflet-popup-close-button{top:8px;right:8px;width:24px;height:24px;font-size:18px;color:var(--ink3)}
+.sp-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:8px 0 0;font-size:12px;line-height:1.45}
+.sp-dl dt{color:var(--ink3);font-size:10.5px;padding-top:1px;white-space:nowrap}.sp-dl dd{margin:0;color:var(--ink)}
+.sp-warn{margin-top:6px;font-size:11.5px;font-weight:700;color:var(--shu)}
+.sp-load{margin-top:8px;font-size:11px;color:var(--ink2);display:flex;align-items:center;gap:6px}
+.sp-load::before{content:"";width:10px;height:10px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--green);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spot-pop .leaflet-popup-content{max-height:calc(100dvh - 420px);min-height:0;overflow-y:auto}
+#app.pop-open .legend,#app.pop-open .fab{opacity:0;pointer-events:none}.legend,.fab{transition:opacity .15s}
+.dt-badges{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.dthru{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px 0 10px;border-radius:17px;font-size:13px;font-weight:700}
+.dthru.yes{background:var(--green);color:var(--card)}
+.dthru.no{background:var(--paper2);color:var(--ink3);border:1px solid var(--line);font-weight:500;position:relative}
+.dthru.no svg{opacity:.55}
+.dthru.no i{position:absolute;left:8px;top:16px;width:26px;height:2px;background:var(--ink3);transform:rotate(-35deg);border-radius:1px}
+.sno{font-family:var(--mono);font-size:12px;color:var(--ink2);padding:0 10px;height:28px;display:inline-flex;align-items:center;border-radius:14px;border:1px solid var(--line)}
+.hrs{white-space:pre-line;font-family:var(--mono);font-size:12.5px;line-height:1.55}
+.sycard{margin:12px 16px 0;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px}
+.sy-h{display:flex;justify-content:space-between;align-items:center;gap:8px}.sy-h b{font-size:14px;font-weight:900}
+.sy-st{font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px;display:inline-flex;align-items:center;gap:5px}
+.sy-st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.sy-st.on{color:var(--green);background:var(--green-soft)}.sy-st.wait{color:oklch(0.55 0.13 65);background:oklch(0.95 0.04 85)}.sy-st.off{color:var(--ink3);background:var(--paper2)}
+.sy-p{margin:8px 0 0;font-size:12px;color:var(--ink2);line-height:1.6}
+.sy-form{display:flex;gap:8px;margin-top:10px}
+.sy-form input{flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--paper);padding:0 12px;font:500 14px var(--mono);color:var(--ink);outline:none}
+.sy-form input:focus{border-color:var(--green)}
+.sy-form button{flex:none;height:44px;padding:0 18px;border-radius:12px;background:var(--green);color:var(--card);font-weight:700}
+.sy-form button:disabled{opacity:.6}
+.sy-link{margin-top:8px;font-size:12px;color:var(--green);text-decoration:underline;text-underline-offset:3px}
+.sy-row{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--ink3)}
+.sy-row code{font:500 13px var(--mono);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sy-row button{font-size:12px;color:var(--green);font-weight:700;padding:6px 4px}
+.addr{color:var(--ink);text-decoration:none;display:flex;flex-direction:column;gap:2px}.addr:hover{color:var(--ink)}.addr span{font-size:11.5px;font-weight:700;color:var(--green)}
+.chip.sw{gap:6px;padding:0 10px 0 5px}
+.chip.sw em{width:34px;height:22px;border-radius:11px;background:var(--paper2);border:1px solid var(--line);position:relative;transition:background .18s,border-color .18s;flex:none}
+.chip.sw em::after{content:"";position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px oklch(0.3 0.02 150/.35);transition:transform .18s}
+.chip.sw.on{background:var(--card);border-color:var(--green);color:var(--ink)}
+.chip.sw.on em{background:var(--green);border-color:var(--green)}.chip.sw.on em::after{transform:translateX(12px)}
+.seg3{flex:1 1 auto;min-width:150px;display:flex;align-items:center;gap:5px;height:34px;padding:0 3px 0 6px;border-radius:17px;border:1px solid var(--line);background:var(--card)}
+.seg3-lb{flex:none;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--shu);color:var(--shu);font-size:10px;font-weight:900;display:grid;place-items:center;transform:rotate(-10deg)}
+.seg3-t{flex:1}
+.seg3-t{position:relative;display:grid;grid-template-columns:repeat(3,1fr);background:var(--paper2);border-radius:14px;padding:2px;height:28px}
+.seg3-t i{position:absolute;top:2px;bottom:2px;left:2px;width:calc((100% - 4px)/3);border-radius:12px;background:var(--card);box-shadow:0 1px 3px oklch(0.3 0.02 150/.25);transition:transform .2s cubic-bezier(.3,.8,.3,1),background .2s}
+.seg3-t[data-i="1"] i{transform:translateX(100%);background:#8CC63F}.seg3-t[data-i="2"] i{transform:translateX(200%);background:var(--green)}
+.seg3-t button{position:relative;z-index:1;min-width:0;padding:0 6px;font-size:12px;font-weight:500;color:var(--ink2);border-radius:12px}
+.seg3-t button.on{font-weight:700;color:var(--ink)}.seg3-t.s-not button.on{color:var(--card)}.seg3-t.s-got button.on{color:oklch(0.25 0.04 140)}
+.ctrls .chip{padding-left:10px;padding-right:10px}.ctrls label.chip{padding-right:22px}
+.ctrls{overflow:visible}
+.ctrls label.chip{flex:0 1 96px;min-width:76px;max-width:96px}
+.ctrls label.chip select{width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctrls .chip.sw{flex:none}
+.ctrls .seg3{flex:1 1 0;min-width:0}
+.seg3-t{min-width:0}.seg3-t button{overflow:hidden;white-space:nowrap;text-overflow:clip;font-size:11.5px;padding:0 2px}
+.ctrls .seg3.so{flex:1 1 0;min-width:0;padding:0 3px}
+.ctrls #stampSeg{flex:0 0 auto;width:122px}
+.seg3-t button{font-size:11px}
+#openSeg .seg3-t[data-i="1"] i{background:var(--green)}#openSeg .seg3-t[data-i="2"] i{background:#a4a196}
+#openSeg .seg3-t.o-open button.on,#openSeg .seg3-t.o-closed button.on{color:var(--card)}
+.detail{max-height:calc(100% - var(--safe-top) - 16px);overflow-y:auto}
+.rt{margin:-4px 0 14px;border-top:1px dashed var(--line);padding-top:12px}
+.rt-sum{display:flex;gap:16px;flex-wrap:wrap}
+.rt-sum span{display:flex;flex-direction:column;font-size:10.5px;color:var(--ink3)}
+.rt-sum b{font:500 17px var(--mono);color:var(--ink)}
+.rt-tr b{color:var(--green)!important}
+.rt-legs{margin-top:10px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.rt-h{display:flex;justify-content:space-between;font-size:12px;font-weight:900;margin-bottom:6px}.rt-h span{font-weight:500;color:var(--ink2)}
+.rt-legs ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.rt-legs li{display:grid;grid-template-columns:14px 1fr;column-gap:10px;padding:4px 0;position:relative}
+.rt-legs li i{grid-row:1/3;width:10px;justify-self:center;border-radius:5px;margin:3px 0}
+.rt-legs li.w i{width:0;border-left:2.5px dotted var(--ink3);border-radius:0}
+.rt-legs li.x i{width:10px;height:10px;border-radius:50%;border:2px solid var(--ink);background:var(--card);align-self:center;margin:0}
+.rt-legs li span{font-size:13px;font-weight:700}.rt-legs li.w span,.rt-legs li.x span{font-weight:500;color:var(--ink2);font-size:12px}
+.rt-legs li em{font-style:normal;font-size:11.5px;color:var(--ink2)}
+.rt-note{font-size:10.5px;color:var(--ink3);margin-top:6px;line-height:1.5}
+.rt-load{font-size:12px;color:var(--ink2)}
+.rt-acts{margin-top:10px}.rt-acts a{font-size:12.5px;font-weight:700}
+.rt-h{width:100%;display:grid!important;grid-template-columns:1fr auto 18px;align-items:center;gap:10px;margin:0!important;text-align:left;min-height:40px}
+.rt-ht{display:flex;flex-direction:column;gap:1px}.rt-ht b{font-size:12.5px;font-weight:900}.rt-ht small{font:500 12px var(--mono);color:var(--green)}
+.rt-chips{display:flex;gap:3px}.rt-chips i{width:16px;height:6px;border-radius:3px}
+.rt-car{width:8px;height:8px;border-right:2px solid var(--ink2);border-bottom:2px solid var(--ink2);transform:rotate(45deg) translate(-2px,-2px);transition:transform .2s;justify-self:center}
+.rt-legs.open .rt-car{transform:rotate(-135deg) translate(-2px,-2px)}
+.rt-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .25s ease}
+.rt-body>div{overflow:hidden;min-height:0}.rt-body{overflow:hidden}
+.rt-legs.open .rt-body{grid-template-rows:1fr}
+.rt-body ol{min-height:0;padding-top:6px!important;border-top:1px dashed var(--line);margin-top:8px!important}
+.rt-legs:not(.open) .rt-body ol{border-top:0;margin-top:0!important;padding-top:0!important}
+.rt-legs:not(.open) .rt-note{display:none}
+.rt-sum{gap:14px}
+.rt-sum{align-items:center;gap:6px 14px}
+.rt-sum span{flex-direction:row!important;align-items:center;gap:5px;color:var(--ink2)!important}
+.rt-sum span svg{flex:none;color:var(--ink2)}
+.rt-sum .rt-dist{flex-direction:column!important;align-items:flex-start;gap:0;padding-right:12px;border-right:1px solid var(--line)}
+.rt-sum .rt-dist small{font-size:10px;color:var(--ink3)}
+.rt-sum b{font-size:15px!important}
+.rt-tr svg{color:var(--green)!important}.rt-tr:empty{display:none!important}
+a.sno{text-decoration:none;color:var(--green);border-color:color-mix(in oklch,var(--green) 45%,var(--line));gap:4px;font-weight:500}a.sno:hover{background:var(--green-soft);color:var(--green)}a.sno span{font-size:10px}
+.addr{flex-direction:row!important;align-items:center;gap:10px;justify-content:space-between}.addr .addr-t{font-size:13px;font-weight:400;color:var(--ink)}.addr .addr-i{flex:none;width:36px;height:36px;border-radius:18px;display:grid;place-items:center;background:var(--green-soft);color:var(--green)}.addr:hover .addr-i{background:var(--green);color:var(--card)}
+
+/* ---- ポケふた ---- */
+:root{--pf:oklch(0.58 0.17 28);--pf-soft:oklch(0.95 0.035 28);--pfgot:#F2B33D}
+.brand{align-items:center}
+.ctrls .seg3.kd,.brand .seg3.kd{flex:none;width:186px;padding:0 3px}
+#kindSeg .seg3-t[data-i="1"] i{background:var(--green)}#kindSeg .seg3-t[data-i="2"] i{background:var(--pf)}
+#kindSeg .seg3-t.k-st button.on,#kindSeg .seg3-t.k-pf button.on{color:var(--card)}
+#kindSeg .seg3-t button{font-size:12px}
+@media (max-width:390px){.brand h1 small{display:none}}
+.kd-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--green)}.kd-dot.pf{background:var(--pf)}
+.row .nm small{font-family:var(--mono);font-size:10.5px;color:var(--ink3);font-weight:500}
+.badge.pf::before{background:var(--pf)}.badge.pf b{color:var(--ink2);font-weight:500}
+.badge.pf{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini-stamp.pf{border-color:var(--pf);color:var(--pf)}
+.pkchips{display:flex;flex-wrap:wrap;gap:6px}
+.pkchip{display:inline-flex;align-items:center;height:28px;padding:0 11px;border-radius:14px;background:var(--pf-soft);color:oklch(0.42 0.13 28);font-size:12.5px;font-weight:700}
+a.sno.pf{color:var(--pf);border-color:color-mix(in oklch,var(--pf) 45%,var(--line))}a.sno.pf:hover{background:var(--pf-soft)}
+.pf-tag{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:14px;background:var(--pf);color:var(--card);font-size:12px;font-weight:700}
+.dt-note{font-size:12px;color:var(--ink2);line-height:1.6}
+.press.pf{background:var(--pf)}
+.stamp.pf{border-color:var(--pf);color:var(--pf);box-shadow:inset 0 0 0 4px var(--card),inset 0 0 0 5.5px var(--pf);border-style:double;border-width:3.5px}
+.bk-prog.three{grid-template-columns:1fr 1fr 1fr;gap:12px}
+.bk-prog.three .v{font-size:22px}
+.bk-prog .mb{height:5px;border-radius:3px;background:var(--paper2);overflow:hidden;margin-top:6px}
+.bk-prog .mb i{display:block;height:100%;border-radius:3px;background:var(--green)}
+.bk-prog .mb.pf i{background:var(--pf)}.bk-prog .mb.pr i{background:var(--shu)}
+.pc .ln{display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:9.5px;color:var(--ink3);white-space:nowrap}
+.pc .ln.z{opacity:.45}
+.pc .ln::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--green)}.pc .ln.pf::before{background:var(--pf)}
+.pc .pb.pf i{background:var(--pf)}
+.pf-img{margin:14px 0 2px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.pf-img>a.pf-pic{position:relative;display:grid;place-items:center;width:200px;height:200px;border-radius:50%;background:var(--paper2);box-shadow:0 0 0 1px var(--line),0 4px 14px oklch(0.3 0.02 150/.15);overflow:hidden;text-decoration:none}
+.pf-img img{width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .25s}
+.pf-img.ok img{opacity:1}.pf-img .pf-ph{position:absolute;font-size:11px;color:var(--ink3)}.pf-img.ok .pf-ph{display:none}
+.pf-img figcaption{font-size:9.5px;color:var(--ink3);text-align:center;line-height:1.4}
+.pf-img .pf-fb{display:none;font-size:12px;font-weight:700;color:var(--pf)}
+.pf-img.err>a.pf-pic,.pf-img.err figcaption{display:none}.pf-img.err .pf-fb{display:inline-block;padding:10px 14px;border-radius:14px;background:var(--pf-soft);text-decoration:none}
+.pf-pop .leaflet-popup-content-wrapper{border-radius:18px;padding:0;box-shadow:0 8px 24px oklch(0.3 0.03 30/.3);border:2px solid var(--pf)}
+.pf-pop .leaflet-popup-tip{background:var(--pf);box-shadow:none}
+.pf-pop .leaflet-popup-content{margin:10px 12px 9px;font-family:inherit;width:auto!important}
+.pfp{display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center}
+.pfp-pic{position:relative;display:grid;place-items:center;width:136px;height:136px;border-radius:50%;background:var(--paper2);overflow:hidden;text-decoration:none;margin-bottom:4px}
+.pfp-pic img{width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .25s}
+.pfp-pic.ok img{opacity:1}.pfp-pic.ok .pfp-ph{display:none}
+.pfp-ph{position:absolute;font-size:10.5px;color:var(--ink3);padding:0 12px;line-height:1.4}
+.pfp-pic.err{background:var(--pf-soft)}.pfp-pic.err .pfp-ph{color:var(--pf);font-weight:700;font-size:11.5px}
+.pfp-more{margin-top:6px;height:30px;padding:0 14px;border-radius:15px;background:var(--pf);color:var(--card);font-size:12px;font-weight:700}
+.pfp-got{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--pf);color:var(--pf);font-size:9px;font-style:normal;transform:rotate(-10deg);vertical-align:1px}
+.pfp b{font-size:13px;font-weight:900;color:var(--ink)}.pfp small{font-size:10.5px;color:var(--ink2);line-height:1.35}
+.bk-note{margin:22px 20px 0;font-size:10.5px;color:var(--ink3);line-height:1.7}
+.bk-note a{color:var(--ink2)}
+</style>
+</head>
+<body>
+<script src="data/pokefuta.js?v=3"></script>
+<div id="app">
+  <div id="map"></div>
+  <div class="top">
+    <div class="brand">
+      <h1>巡り帖<small>店舗とポケふた</small></h1>
+      <span class="loc" id="loc" hidden></span>
+      <div class="seg3 kd" id="kindSeg" role="radiogroup" aria-label="表示する種類"><div class="seg3-t"><i></i><button data-k="both">両方</button><button data-k="st">店舗</button><button data-k="pf">ポケふた</button></div></div>
+    </div>
+    <div class="seg" id="mode"><button data-m="car">車</button><button data-m="transit">電車・バス</button><button data-m="simple">シンプル</button></div>
+    <div class="ctrls">
+      <label class="chip"><select id="pref"></select><span class="caret"></span></label>
+      <div class="seg3 so" id="openSeg" role="radiogroup" aria-label="営業"><div class="seg3-t"><i></i><button data-s="all" class="on">ALL</button><button data-s="open">営業中</button><button data-s="closed">時間外</button></div></div>
+      <div class="seg3" id="stampSeg" role="radiogroup" aria-label="スタンプ"><span class="seg3-lb" aria-hidden="true">印</span><div class="seg3-t"><i></i><button data-s="all" class="on">ALL</button><button data-s="got">済</button><button data-s="not">未</button></div></div>
+      </div>
+    <div class="src" id="srcbar"><span id="src">ダミーデータ</span><button id="reload">↻ 最新を取得</button></div>
+  </div>
+  <button class="fab" id="locate" title="現在地"><span></span></button>
+  <div id="home"></div>
+  <div class="book" id="book"></div>
+  <div class="detail" id="detail"></div>
+  <div class="toast" id="toast"></div>
+</div>
+<script>
+const V=new URLSearchParams(location.search).get('v')||'a';
+document.documentElement.dataset.v=V;
+const $=s=>document.querySelector(s);
+
+// ---------- dummy data (deterministic) ----------
+let seed=20261106;
+const rnd=()=>{seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const gauss=()=>{let u=0,v=0;while(!u)u=rnd();while(!v)v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+const P=`北海道|北海道|62|札幌,43.062,141.354,5;旭川,43.770,142.365,1;函館,41.768,140.729,1;帯広,42.920,143.200,.7
+青森|東北|10|青森,40.822,140.747,1;八戸,40.512,141.488,1
+岩手|東北|9|盛岡,39.702,141.154,1
+宮城|東北|30|仙台,38.268,140.869,3
+秋田|東北|7|秋田,39.720,140.103,1
+山形|東北|8|山形,38.240,140.363,1
+福島|東北|17|郡山,37.400,140.380,1;福島,37.750,140.470,1;いわき,37.050,140.887,1
+茨城|関東|40|水戸,36.370,140.470,1;つくば,36.083,140.110,1;日立,36.600,140.650,.6
+栃木|関東|26|宇都宮,36.555,139.883,2;小山,36.310,139.800,1
+群馬|関東|24|前橋,36.390,139.060,1;高崎,36.322,139.003,1
+埼玉|関東|105|さいたま,35.861,139.645,3;川越,35.925,139.486,1;所沢,35.799,139.469,1;川口,35.807,139.724,1;越谷,35.891,139.791,1
+千葉|関東|95|千葉,35.607,140.106,2;船橋,35.694,139.983,2;柏,35.868,139.976,1;浦安,35.636,139.890,1
+東京|関東|380|新宿,35.690,139.700,3;渋谷,35.658,139.701,3;丸の内,35.681,139.767,3;池袋,35.729,139.711,2;品川,35.628,139.739,2;上野,35.713,139.777,1;立川,35.698,139.414,1;吉祥寺,35.703,139.580,1;町田,35.542,139.446,1;八王子,35.655,139.339,1
+神奈川|関東|160|横浜,35.466,139.622,4;川崎,35.531,139.697,2;藤沢,35.339,139.490,1;相模原,35.571,139.373,1;鎌倉,35.319,139.546,.6
+新潟|中部|20|新潟,37.912,139.062,2;長岡,37.446,138.851,1
+富山|中部|10|富山,36.696,137.214,1
+石川|中部|13|金沢,36.578,136.648,1
+福井|中部|7|福井,36.065,136.222,1
+山梨|中部|9|甲府,35.662,138.568,1
+長野|中部|24|長野,36.648,138.195,1;松本,36.238,137.972,1;軽井沢,36.348,138.597,.5
+岐阜|中部|20|岐阜,35.423,136.761,1;大垣,35.360,136.612,.6
+静岡|中部|45|静岡,34.975,138.383,2;浜松,34.711,137.726,2;沼津,35.096,138.864,1
+愛知|中部|120|名古屋,35.170,136.882,5;豊田,35.083,137.156,1;岡崎,34.955,137.174,1;豊橋,34.769,137.392,1
+三重|近畿|18|津,34.719,136.505,1;四日市,34.965,136.624,1
+滋賀|近畿|16|大津,35.018,135.855,1;草津,35.017,135.960,1
+京都|近畿|55|京都,35.003,135.768,4;宇治,34.884,135.800,1
+大阪|近畿|150|梅田,34.702,135.495,3;難波,34.666,135.501,2;天王寺,34.646,135.513,1.5;堺,34.573,135.483,1;豊中,34.781,135.469,1;枚方,34.814,135.651,1;東大阪,34.679,135.601,1
+兵庫|近畿|75|神戸,34.690,135.195,3;姫路,34.828,134.690,1;西宮,34.738,135.342,1;尼崎,34.733,135.406,1
+奈良|近畿|14|奈良,34.685,135.805,1
+和歌山|近畿|8|和歌山,34.226,135.167,1
+鳥取|中国|5|鳥取,35.501,134.235,1;米子,35.428,133.331,1
+島根|中国|5|松江,35.468,133.048,1
+岡山|中国|22|岡山,34.662,133.918,2;倉敷,34.585,133.772,1
+広島|中国|38|広島,34.397,132.460,3;福山,34.486,133.362,1
+山口|中国|12|山口,34.186,131.471,1;下関,33.958,130.941,1
+徳島|四国|6|徳島,34.070,134.555,1
+香川|四国|10|高松,34.343,134.047,1
+愛媛|四国|12|松山,33.839,132.766,1
+高知|四国|6|高知,33.559,133.531,1
+福岡|九州・沖縄|80|博多,33.590,130.420,3;天神,33.591,130.399,2;北九州,33.884,130.882,1;久留米,33.319,130.508,1
+佐賀|九州・沖縄|7|佐賀,33.249,130.299,1
+長崎|九州・沖縄|10|長崎,32.750,129.878,1;佐世保,33.180,129.720,1
+熊本|九州・沖縄|20|熊本,32.803,130.708,2
+大分|九州・沖縄|10|大分,33.238,131.613,1
+宮崎|九州・沖縄|10|宮崎,31.911,131.424,1
+鹿児島|九州・沖縄|16|鹿児島,31.596,130.557,1
+沖縄|九州・沖縄|30|那覇,26.212,127.681,2;北谷,26.320,127.760,1;名護,26.590,127.980,.6`;
+const PREFS=P.split('\n').map(l=>{const[n,r,c,cs]=l.split('|');return{n,r,c:+c,cities:cs.split(';').map(x=>{const[a,b,d,w]=x.split(',');return{n:a,lat:+b,lng:+d,w:+w}})}});
+const SUF=['駅前','駅北口','駅南口','東口','西口','中央通り','大通り','本町','公園前','モール','駅ビル','タワー','二丁目','市役所前','ストリート','ガーデン','テラス','三丁目','県庁前','北店'];
+const MALL=new Set(['モール','ガーデン','テラス']);
+const TOWN=['本町','中央','栄町','緑町','旭町','錦','幸町','元町','新町','若葉','桜木町','松原'];
+const HRS=[['7:00','22:00',.42],['8:00','21:00',.2],['7:00','23:00',.16],['6:30','22:30',.1],['8:00','22:00',.12]];
+const STORES=[];
+PREFS.forEach(p=>{
+  const tw=p.cities.reduce((a,c)=>a+c.w,0),used=new Set();
+  for(let i=0;i<p.c;i++){
+    let r=rnd()*tw,c=p.cities[0];for(const x of p.cities){if((r-=x.w)<=0){c=x;break}}
+    const s=.01+.01*c.w;
+    let suf=SUF[Math.floor(rnd()*SUF.length)],name=c.n+suf;
+    let k=2;while(used.has(name))name=c.n+suf+(k++);used.add(name);
+    let h=MALL.has(suf)?['10:00',rnd()<.5?'21:00':'20:00']:(()=>{let q=rnd();for(const x of HRS){if((q-=x[2])<=0)return x}return HRS[0]})();
+    STORES.push({id:'s'+STORES.length,name:name+'店',pref:p.n,region:p.r,city:c.n,
+      lat:c.lat+gauss()*s,lng:c.lng+gauss()*s*1.2,
+      addr:`${p.n==='北海道'?'':p.n+(p.n==='東京'?'都':p.n==='大阪'||p.n==='京都'?'府':'県')}${c.n}${TOWN[Math.floor(rnd()*TOWN.length)]}${1+Math.floor(rnd()*5)}-${1+Math.floor(rnd()*20)}-${1+Math.floor(rnd()*12)}`,
+      open:h[0],close:h[1]});
+  }
+});
+// ---------- ポケふた（data/pokefuta.js） ----------
+const PF=(window.POKEFUTA||[]).map(p=>{const pr=PREFS.find(x=>x.n===p.pref)||PREFS.find(x=>p.addr&&p.addr.startsWith(x.n))||PREFS[0];
+  return{id:'p'+p.id,kind:'pf',no:String(p.id),name:p.place||p.city,pref:pr.n,region:pr.r,city:p.city,lat:p.lat,lng:p.lng,addr:p.addr||'場所情報なし',poke:p.poke||[],note:p.note||'',img:p.img||'',url:'https://local.pokemon.jp/manhole/desc/'+p.id+'/'}});
+const PCF={};PF.forEach(s=>PCF[s.pref]=(PCF[s.pref]||0)+1);
+const isPF=s=>s&&s.kind==='pf';
+PF.forEach(s=>STORES.push(s));
+const PC={};STORES.forEach(s=>{if(!isPF(s))PC[s.pref]=(PC[s.pref]||0)+1});
+let TOTAL=STORES.length-PF.length;const BY={};STORES.forEach(s=>BY[s.id]=s);const byId=id=>BY[id];
+
+// ---------- helpers ----------
+const toMin=t=>{const[a,b]=t.split(':');return a*60+ +b};
+const nowMin=()=>{const d=new Date();return d.getHours()*60+d.getMinutes()};
+function status(s){if(isPF(s))return{k:'pf',t:s.poke.join('・')||'ポケふた',sub:''};if(!s.open)return{k:'unknown',t:'営業時間不明',sub:''};let n=nowMin(),o=toMin(s.open),c=toMin(s.close);if(c<=o){c+=1440;if(n<o)n+=1440}
+  if(n>=o&&n<c)return c-n<=30?{k:'soon',t:'まもなく閉店',sub:s.close+'まで'}:{k:'open',t:'営業中',sub:s.close+'まで'};
+  return{k:'closed',t:'営業時間外',sub:s.open+'から'}}
+const badge=s=>{const t=status(s);return `<span class="badge ${t.k}"><b>${t.t}</b>${t.sub}</span>`};
+function hav(a,b,c,d){const R=6371e3,r=Math.PI/180,x=Math.sin((c-a)*r/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin((d-b)*r/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+const fmtD=m=>m<1000?Math.round(m/10)*10+'m':m<100000?(m/1000).toFixed(1)+'km':Math.round(m/1000)+'km';
+const walk=m=>{const md=typeof st!=='undefined'?st.mode:'car';if(m<(md==='car'?800:1500))return `徒歩${Math.max(1,Math.round(m/80))}分`;if(m>=60000)return '';return md==='transit'?`電車・バスで約${Math.round(m/350+8)}分`:`車で約${Math.max(3,Math.round(m/450))}分`};
+const fmtDate=iso=>iso.slice(0,10).replace(/-/g,'.');
+const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const mapUrl=s=>{const q=encodeURIComponent(isPF(s)?'ポケふた '+s.addr:(/^スターバックス/.test(s.name)?'':'スターバックス ')+s.name);return IOS?`https://maps.apple.com/?q=${q}&ll=${s.lat},${s.lng}&z=17`:`https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`};
+const rot=id=>{let n=parseInt(String(id).replace(/\D/g,''))||[...String(id)].reduce((a,c)=>a+c.charCodeAt(0),0);return((n*37)%22)-14};
+
+// ---------- state ----------
+let KEY='meguri-visited-v1';
+let visited={};
+try{visited=JSON.parse(localStorage.getItem(KEY))||null}catch(e){visited=null}
+if(!visited){visited={};
+  [['大阪','天王寺','2026-10-28'],['京都','京都','2026-09-14'],['東京','渋谷','2026-08-03'],['北海道','札幌','2026-07-21'],['福岡','博多','2026-05-02'],['沖縄','那覇','2026-03-18'],['大阪','難波','2026-11-01']]
+  .forEach(([p,c,d])=>{const s=STORES.find(x=>x.pref===p&&x.city===c&&!visited[x.id]);if(s)visited[s.id]=d});
+  localStorage.setItem(KEY,JSON.stringify(visited))}
+const PFKEY='meguri-visited-pokefuta';
+function loadPFV(){try{return JSON.parse(localStorage.getItem(PFKEY)||'{}')||{}}catch(e){return{}}}
+Object.assign(visited,loadPFV());
+// スタバ店舗は従来のキー、ポケふたは専用キーに分けて保存（店舗データの読込元が変わってもポケふたの記録は消えない）
+function persistVisited(){const a={},b={};for(const k in visited)(k[0]==='p'?b:a)[k]=visited[k];try{localStorage.setItem(KEY,JSON.stringify(a));localStorage.setItem(PFKEY,JSON.stringify(b))}catch(e){}}
+const save=()=>{persistVisited();if(window.onVisitedChange)window.onVisitedChange()};
+const user={lat:34.6466,lng:135.5133,label:'天王寺付近（仮）'};
+let KIND0='both';try{KIND0=localStorage.getItem('meguri-kind')||'both'}catch(e){}
+const st={kind:KIND0,open:'all',hide:new Set(),stamp:'all',mode:V==='b'?'simple':'car',pref:'',openOnly:false,tab:V==='b'?'book':'map',sel:null,sheet:V==='b'?'half':'half',list:[]};
+function calcDist(){STORES.forEach(s=>s.d=hav(user.lat,user.lng,s.lat,s.lng))}
+calcDist();
+
+// ---------- map ----------
+const map=L.map('map',{zoomControl:false,preferCanvas:true,minZoom:4,worldCopyJump:false});
+const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'});
+const transit=L.tileLayer('https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png',{maxZoom:18,attribution:'Map <a href="https://memomaps.de/">memomaps.de</a> CC-BY-SA · © OpenStreetMap contributors'});
+map.createPane('rail');map.getPane('rail').style.zIndex=250;
+const rail=L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',{pane:'rail',maxZoom:19,subdomains:'abc',opacity:.85,attribution:'© <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> CC-BY-SA'});
+let land=null;
+const C={green:'#2f6b4f',shu:'#c0432b',got:'#8CC63F',gray:'#a4a196',ink:'#28322c',pf:'#d4492f',pfgot:'#F2B33D'};
+const layer=L.layerGroup().addTo(map);
+const rad=()=>{const z=map.getZoom();return z<6?1.8:z<8?2.6:z<10?3.6:z<13?5:7};
+function mstyle(s){const v=visited[s.id],o=status(s).k!=='closed';
+  if(isPF(s))return{radius:rad()+2.5,color:v?'#8a5a00':'#fff',weight:2.5,fillColor:v?C.pfgot:C.pf,fillOpacity:1,opacity:1};
+  return{radius:rad()+1,color:o?'#fff':'#8f8c82',weight:2,fillColor:v?C.got:C.green,fillOpacity:1,opacity:1}}
+STORES.forEach(s=>{s.m=L.circleMarker([s.lat,s.lng],mstyle(s)).on('click',()=>onMarker(s))});
+const selRing=L.circleMarker([0,0],{radius:12,color:C.ink,weight:2.5,fill:false,interactive:false});
+const me=L.layerGroup([L.circleMarker([user.lat,user.lng],{radius:16,stroke:false,fillColor:'#3b6fd8',fillOpacity:.15,interactive:false}),L.circleMarker([user.lat,user.lng],{radius:6,color:'#fff',weight:2.5,fillColor:'#3b6fd8',fillOpacity:1,interactive:false})]).addTo(map);
+map.on('zoomend',()=>{const r=rad();st.list.forEach(s=>s.m.setRadius(r+(isPF(s)?2.5:1)))});
+map.setView([user.lat,user.lng],V==='b'?6:13);
+
+async function setMode(m){st.mode=m;
+  document.querySelectorAll('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+  $('#map').classList.toggle('simple',m==='simple');$('#map').classList.toggle('transit',m==='transit');
+  if(st.list.length)renderHome();if(st.sel)renderDetail(false);
+  [osm,transit,rail].forEach(l=>map.removeLayer(l));if(typeof transitOn==='function')transitOn(m==='transit');
+  if(m==='car'){if(land)map.removeLayer(land);osm.addTo(map);map.setMaxZoom(19)}
+  else if(m==='transit'){if(land)map.removeLayer(land);osm.addTo(map);map.setMaxZoom(19)}
+  else{map.setMaxZoom(9);if(map.getZoom()>9)map.setZoom(9);
+    if(!land){try{const t=await (await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')).json();
+      const fc=topojson.feature(t,t.objects.countries);
+      land=L.geoJSON(fc,{interactive:false,attribution:'Natural Earth',style:f=>({color:'#b9b2a1',weight:f.id==='392'?1.2:.6,fillColor:f.id==='392'?'#fbf8f1':'#ece7dc',fillOpacity:1})})}catch(e){toast('輪郭データを読み込めませんでした')}}
+    if(land&&st.mode==='simple'){land.addTo(map);land.bringToBack()}}
+}
+
+// ---------- filtering & rendering ----------
+function applyFilter(fit){
+  st.list=STORES.filter(s=>(st.kind==='both'||(st.kind==='pf')===isPF(s))&&(!st.pref||s.pref===st.pref)&&(st.open==='all'||(isPF(s)?st.open!=='closed':(st.open==='open')===/open|soon/.test(status(s).k)))&&(st.stamp==='all'||(st.stamp==='got')===!!visited[s.id])&&!st.hide.has((visited[s.id]?'g':'n')+(status(s).k==='closed'?'c':'o'))).sort((a,b)=>a.d-b.d);
+  layer.clearLayers();st.list.forEach(s=>{s.m.setStyle(mstyle(s));layer.addLayer(s.m)});st.list.forEach(s=>{if(isPF(s))s.m.bringToFront()});
+  if(fit){if(st.pref&&st.list.length){map.fitBounds(L.latLngBounds(st.list.map(s=>[s.lat,s.lng])),{paddingTopLeft:[30,214],paddingBottomRight:[30,V==='c'?200:320],maxZoom:13})}
+    else if(!st.pref)map.fitBounds([[30.5,128.5],[45.5,145.8]],{paddingTopLeft:[10,194],paddingBottomRight:[10,V==='c'?180:260]})}
+  renderHome();
+}
+function row(s){const pf=isPF(s);return `<button class="row" data-id="${s.id}"><span class="nm">${st.kind==='both'?`<i class="kd-dot ${pf?'pf':''}"></i>`:''}${visited[s.id]?`<i class="mini-stamp ${pf?'pf':''}">印</i>`:''}<em>${s.name}</em>${pf?`<small>No.${s.no}</small>`:''}</span><span class="ds">${fmtD(s.d)}</span><span class="st">${badge(s)}</span><span class="wk">${walk(s.d)}</span></button>`}
+function renderHome(){
+  const h=$('#home');
+  if(V==='c'){
+    const top=st.list.slice(0,30);
+    h.innerHTML=`<div class="cards" id="cards">${top.length?top.map(s=>`<button class="ticket" data-id="${s.id}"><div class="main"><span class="pf">${s.pref.toUpperCase()} / ${s.city}</span><span class="nm">${s.name}</span><span class="st">${badge(s)}</span></div><div class="stub"><span class="km">${fmtD(s.d)}</span><span class="wk">${walk(s.d)||'&nbsp;'}</span><span class="ring ${visited[s.id]?'done':''}">${visited[s.id]?'済':'未'}</span></div></button>`).join(''):`<div class="ticket"><div class="main"><span class="nm">該当する店舗がありません</span><span class="st">条件をゆるめてください</span></div><div class="stub"></div></div>`}</div>`;
+    const cards=$('#cards');let tm;
+    cards.onscroll=()=>{clearTimeout(tm);tm=setTimeout(()=>{const w=312,i=Math.round(cards.scrollLeft/w),s=top[i];if(s){markCur(s.id);select(s,{pan:true,open:false})}},140)};
+    cards.querySelectorAll('.ticket[data-id]').forEach(b=>b.onclick=()=>{const s=byId(b.dataset.id);select(s,{pan:true,open:true})});
+    if(top[0]&&!st.sel)markCur(top[0].id);
+    return;
+  }
+  const label=st.pref?st.pref:'全国';
+  h.innerHTML=`<div class="sheet" id="sheet" data-s="${st.sheet}"><button class="handle" id="handle" aria-label="リストの高さ"></button>
+  <div class="sh-head"><b>${(st.pref?label+'の':'近くの')+{both:'スポット',st:'店舗',pf:'ポケふた'}[st.kind]}</b><span>${st.list.length.toLocaleString()}件（取得 ${st.list.filter(s=>visited[s.id]).length}）· 近い順</span></div>
+  <div class="list" id="list">${st.list.length?st.list.slice(0,80).map(row).join(''):'<div class="empty">条件に合うスポットがありません</div>'}${st.list.length>80?`<div class="empty">ほか ${(st.list.length-80).toLocaleString()} 件 — 都道府県で絞り込むと見やすくなります</div>`:''}</div></div>
+  <nav class="tabs"><button class="t-map ${st.tab==='map'?'on':''}" data-t="map"><i>◦</i>地図</button><button class="t-book ${st.tab==='book'?'on':''}" data-t="book"><i>印</i>巡り帖</button></nav>`;
+  bindSheet();
+  $('#list').onclick=e=>{const b=e.target.closest('.row');if(b)select(byId(b.dataset.id),{pan:true,open:true})};
+  h.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
+  $('#sheet').style.display=st.tab==='map'?'':'none';
+}
+
+function bindSheet(){const sh=$('#sheet');if(!sh)return;const grips=[$('#handle'),sh.querySelector('.sh-head')];
+  const ORDER=['min','peek','half','full'];
+  const snapH=()=>{const cur=sh.style.height;sh.classList.add('drag');const o={};ORDER.forEach(k=>{sh.style.height='';sh.dataset.s=k;o[k]=sh.offsetHeight});sh.dataset.s=st.sheet;sh.style.height=cur;return o};
+  let y0=0,h0=0,t0=0,moved=false,id=null;
+  grips.forEach(g=>{if(!g)return;g.style.touchAction='none';g.style.cursor='grab';
+    g.onpointerdown=e=>{id=e.pointerId;g.setPointerCapture(id);y0=e.clientY;h0=sh.offsetHeight;t0=performance.now();moved=false;sh.classList.add('drag')};
+    g.onpointermove=e=>{if(id!==e.pointerId)return;const dy=e.clientY-y0;if(Math.abs(dy)>4)moved=true;if(moved){const mx=$('#app').offsetHeight-120;sh.style.height=Math.max(48,Math.min(mx,h0-dy))+'px'}};
+    g.onpointerup=g.onpointercancel=e=>{if(id!==e.pointerId)return;id=null;
+      if(!moved){sh.classList.remove('drag');sh.style.height='';setSheet(st.sheet==='min'?'half':{peek:'half',half:'full',full:'min'}[st.sheet]);return}
+      const H=snapH(),h=sh.offsetHeight,v=(y0-e.clientY)/Math.max(1,performance.now()-t0);let best=st.sheet,bd=1e9;
+      ORDER.forEach(k=>{const d=Math.abs(H[k]-h-v*180);if(d<bd){bd=d;best=k}});
+      sh.offsetHeight;sh.classList.remove('drag');sh.style.height='';setSheet(best)}});
+}
+function setSheet(k){st.sheet=k;const sh=$('#sheet');if(sh)sh.dataset.s=k}
+map.on('dragstart',()=>{if(V!=='c'&&st.tab==='map'&&(st.sheet==='half'||st.sheet==='full'))setSheet('min')});
+function markCur(id){document.querySelectorAll('.ticket').forEach(t=>t.classList.toggle('cur',t.dataset.id===id))}
+function onMarker(s){
+  if(V==='c'){const i=st.list.slice(0,30).indexOf(s);if(i>=0){$('#cards').scrollTo({left:i*312,behavior:'smooth'});markCur(s.id)}select(s,{pan:false,open:true})}
+  else select(s,{pan:false,open:!isPF(s)});
+}
+// ポケふたの点を選ぶと、点から絵柄の吹き出しを出す
+const pfPop=L.popup({className:'pf-pop',closeButton:false,autoPan:true,offset:[0,-4],minWidth:150,maxWidth:180,autoPanPaddingTopLeft:[16,230],autoPanPaddingBottomRight:[16,380]});
+function showPfPop(s){if(!isPF(s)){map.closePopup(pfPop);return}
+  const src=s.img?`https://local.pokemon.jp/img/p/manhole/${s.img}_m.png`:'';
+  pfPop.setLatLng([s.lat,s.lng]).setContent(`<div class="pfp"><a class="pfp-pic" href="${s.url}" target="_blank" rel="noopener" title="公式サイトで見る"><span class="pfp-ph">${src?'読み込み中…':'絵柄なし'}</span>${src?`<img src="${src}" alt="${s.name}のポケふたの絵柄" referrerpolicy="no-referrer" onload="this.parentNode.classList.add('ok')" onerror="this.parentNode.classList.add('err');this.previousElementSibling.textContent='公式サイトで絵柄を見る ↗'">`:''}</a><b>${s.name}${visited[s.id]?' <i class="pfp-got">済</i>':''}</b><small>${s.poke.join('・')}</small><button class="pfp-more" id="pfpMore">詳細・スタンプ ›</button></div>`).openOn(map);
+  const b=document.getElementById('pfpMore');if(b)b.onclick=e=>{L.DomEvent.stop(e);pfKeep=true;map.closePopup(pfPop);pfKeep=false;renderDetail(true)}}
+let pfKeep=false;
+map.on('popupclose',e=>{if(e.popup===pfPop&&!pfKeep&&st.sel&&isPF(st.sel)&&!$('#detail').classList.contains('show')){st.sel=null;map.removeLayer(selRing)}});
+function select(s,{pan,open}){
+  st.sel=s;selRing.setLatLng([s.lat,s.lng]).addTo(map);if(isPF(s)&&!open){$('#detail').classList.remove('show');showPfPop(s)}else{pfKeep=true;map.closePopup(pfPop);pfKeep=false}
+  if(pan){const z=Math.max(map.getZoom(),st.mode==='simple'?8:14);const pt=map.project([s.lat,s.lng],z).add([0,V==='c'?90:(open?140:100)]);map.setView(map.unproject(pt,z),z,{animate:true})}
+  if(open)renderDetail(true);
+}
+function renderDetail(show,pop){
+  const s=st.sel,d=$('#detail');if(!s){d.classList.remove('show');return}
+  const v=visited[s.id];
+  if(isPF(s))return renderPF(s,v,show,pop);
+  d.innerHTML=`<div class="dt-top"><div><div class="dt-pf">${s.region} / ${s.pref} / ${s.city}</div><h3 class="dt-nm">${s.name}</h3>${(s.dt===true||s.no)?`<div class="dt-badges">${s.dt===true?`<span class="dthru yes" title="ドライブスルー対応" aria-label="ドライブスルー対応"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 11l1.6-4.2A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.3L19 11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><rect x="3" y="11" width="18" height="6" rx="2" fill="currentColor"/><circle cx="7.5" cy="17.5" r="1.9" fill="currentColor"/><circle cx="16.5" cy="17.5" r="1.9" fill="currentColor"/></svg>対応</span>`:''}${s.no?`${s.url?`<a class="sno" href="${s.url}" target="_blank" rel="noopener" title="公式の店舗ページを開く">#${s.no}<span aria-hidden="true">↗</span></a>`:`<span class="sno">#${s.no}</span>`}`:''}</div>`:''}</div><button class="x" id="dx" aria-label="閉じる"></button></div>
+  <dl class="dt-grid"><dt>状態</dt><dd>${badge(s)}</dd><dt>営業時間</dt><dd class="hrs">${s.hoursRaw?fmtHours(s.hoursRaw):(s.open?s.open+' – '+s.close:'情報なし')}</dd><dt>住所</dt><dd><a class="addr" href="${mapUrl(s)}" target="_blank" rel="noopener" title="地図アプリで開く"><span class="addr-t">${s.addr}</span><span class="addr-i" aria-label="地図アプリで開く"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M3 6.5l5.5-2.5 7 2.5L21 4v13.5L15.5 20l-7-2.5L3 20z"/><path d="M8.5 4v13.5M15.5 6.5V20"/></svg></span></a></dd></dl>
+  <div id="route" class="rt"></div>
+  <div class="dt-act">${v?`<div class="stamp ${pop?'pop':''}" style="--r:${rot(s.id)}deg;transform:rotate(${rot(s.id)}deg)"><span class="s1">${s.pref}</span><span class="s2">${s.name.replace(/店$/,'')}</span><span class="s3">${fmtDate(v)}</span></div><div class="dt-done"><b>${pop?'スタンプを押しました':'訪問済み'}</b><span>巡り帖 ${countKind('st')}店目 · ${s.pref}で${countPref(s.pref,'st')}店目</span><button id="undo">取り消す</button></div>`:`<button class="press" id="press"><i></i>スタンプを押す</button>`}</div>`;
+  if(show)requestAnimationFrame(()=>d.classList.add('show'));
+  $('#dx').onclick=closeDetail;
+  const p=$('#press');if(p)p.onclick=()=>{visited[s.id]=new Date().toISOString();save();refreshStore(s);renderDetail(false,true)};
+  const u=$('#undo');if(u)u.onclick=()=>{delete visited[s.id];save();refreshStore(s);renderDetail(false)};
+}
+const MAPI=`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M3 6.5l5.5-2.5 7 2.5L21 4v13.5L15.5 20l-7-2.5L3 20z"/><path d="M8.5 4v13.5M15.5 6.5V20"/></svg>`;
+function renderPF(s,v,show,pop){const d=$('#detail');
+  d.innerHTML=`<div class="dt-top"><div><div class="dt-pf">POKEFUTA / ${s.region} / ${s.pref}</div><h3 class="dt-nm">${s.name}</h3><div class="dt-badges"><span class="pf-tag">ポケふた</span><a class="sno pf" href="${s.url}" target="_blank" rel="noopener" title="公式サイトの紹介ページを開く">No.${s.no}<span aria-hidden="true">↗</span></a></div></div><button class="x" id="dx" aria-label="閉じる"></button></div>
+  ${s.img?`<figure class="pf-img" id="pfImg"><a class="pf-pic" href="${s.url}" target="_blank" rel="noopener" title="公式サイトで大きく見る"><span class="pf-ph">絵柄を読み込み中…</span><img src="https://local.pokemon.jp/img/p/manhole/${s.img}_m.png" alt="${s.name}のポケふたの絵柄（${s.poke.join('・')}）" decoding="async" referrerpolicy="no-referrer"></a><figcaption>絵柄：ポケモンローカルActs公式サイトより ©Pokémon. ©Nintendo/Creatures Inc./GAME FREAK inc.</figcaption><a class="pf-fb" href="${s.url}" target="_blank" rel="noopener">この画面では絵柄を表示できません。公式サイトで絵柄を見る ↗</a></figure>`:''}
+  <dl class="dt-grid"><dt>ポケモン</dt><dd><div class="pkchips">${s.poke.length?s.poke.map(n=>`<span class="pkchip">${n}</span>`).join(''):'—'}</div></dd><dt>場所</dt><dd><a class="addr" href="${mapUrl(s)}" target="_blank" rel="noopener" title="地図アプリで開く"><span class="addr-t">${s.addr}</span><span class="addr-i" aria-label="地図アプリで開く">${MAPI}</span></a></dd>${s.note?`<dt>メモ</dt><dd class="dt-note">${s.note}</dd>`:''}</dl>
+  <div id="route" class="rt"></div>
+  <div class="dt-act">${v?`<div class="stamp pf ${pop?'pop':''}" style="--r:${rot(s.id)}deg;transform:rotate(${rot(s.id)}deg)"><span class="s1">${s.pref}</span><span class="s2">${s.city}</span><span class="s3">${fmtDate(v)}</span></div><div class="dt-done"><b>${pop?'スタンプを押しました':'見つけた！'}</b><span>ポケふた ${countKind('pf')}枚目 · ${s.pref}で${countPref(s.pref,'pf')}枚目</span><button id="undo">取り消す</button></div>`:`<button class="press pf" id="press"><i></i>見つけた！スタンプを押す</button>`}</div>`;
+  const fg=$('#pfImg');if(fg){const im=fg.querySelector('img'),ok=()=>fg.classList.add('ok'),ng=()=>fg.classList.add('err');if(im.complete&&im.naturalWidth)ok();else if(im.complete)ng();else{im.onload=ok;im.onerror=ng;setTimeout(()=>{if(!im.naturalWidth)ng()},8000)}}
+  if(show)requestAnimationFrame(()=>d.classList.add('show'));
+  $('#dx').onclick=closeDetail;
+  const p=$('#press');if(p)p.onclick=()=>{visited[s.id]=new Date().toISOString();save();refreshStore(s);renderDetail(false,true)};
+  const u=$('#undo');if(u)u.onclick=()=>{delete visited[s.id];save();refreshStore(s);renderDetail(false)};
+}
+function closeDetail(){$('#detail').classList.remove('show');st.sel=null;map.removeLayer(selRing);map.closePopup(pfPop)}
+const kindOf=id=>id[0]==='p'?'pf':'st';
+const countPref=(p,k)=>Object.keys(visited).filter(id=>byId(id)&&byId(id).pref===p&&(!k||kindOf(id)===k)).length;
+const countKind=k=>Object.keys(visited).filter(id=>byId(id)&&kindOf(id)===k).length;
+function refreshStore(s){s.m.setStyle(mstyle(s));if(st.stamp!=='all'||st.hide.size)applyFilter(false);else renderHome();if(st.tab==='book')renderBook();
+  if(V==='c'&&st.sel){markCur(st.sel.id);const i=st.list.slice(0,30).indexOf(st.sel);if(i>=0)$('#cards').scrollLeft=i*312}}
+
+function renderBook(){
+  const ids=Object.keys(visited).filter(id=>byId(id)).sort((a,b)=>visited[b].localeCompare(visited[a]));
+  const prefs=new Set(ids.map(id=>byId(id).pref));
+  const regions=[...new Set(PREFS.map(p=>p.r))];
+  const nS=countKind('st'),nP=countKind('pf'),TP=PF.length;
+  const stampOf=id=>{const s=byId(id),pf=isPF(s);return `<button data-id="${id}"><div class="stamp sm ${pf?'pf':''}" style="transform:rotate(${rot(id)}deg)"><span class="s1">${s.pref}</span><span class="s2">${pf?s.city:s.name.replace(/店$/,'')}</span><span class="s3">${fmtDate(visited[id])}</span></div></button>`};
+  $('#book').innerHTML=`<div class="bk-hd"><h2>巡り帖</h2>${V==='c'?'<button class="x" id="bx" aria-label="閉じる"></button>':''}</div>
+  <div class="bk-sub">訪れた店舗と見つけたポケふたにスタンプを押して、全国を巡ろう</div>
+  <div class="bk-prog three"><div><div class="k">店舗</div><div class="v">${nS}<small> / ${TOTAL.toLocaleString()}</small></div><div class="mb"><i style="width:${Math.max(1.5,nS/Math.max(1,TOTAL)*100)}%"></i></div></div><div><div class="k">ポケふた</div><div class="v">${nP}<small> / ${TP}</small></div><div class="mb pf"><i style="width:${Math.max(1.5,nP/Math.max(1,TP)*100)}%"></i></div></div><div><div class="k">都道府県</div><div class="v">${prefs.size}<small> / 47</small></div><div class="mb pr"><i style="width:${Math.max(1.5,prefs.size/47*100)}%"></i></div></div></div>
+  <div class="bk-sec"><b>最近のスタンプ</b><span>${ids.length}</span></div>
+  <div class="stamps">${ids.length?ids.map(stampOf).join(''):'<div class="empty" style="padding:16px 4px">まだスタンプがありません</div>'}</div>
+  <div class="bk-sec"><b>都道府県</b><span>タップで地図へ</span></div>
+  ${regions.map(r=>`<div class="region">${r}</div><div class="pgrid">${PREFS.filter(p=>p.r===r).map(p=>{const a=countPref(p.n,'st'),b=countPref(p.n,'pf'),A=PC[p.n]||0,B=PCF[p.n]||0,n=a+b,sk=st.kind;
+    const ratio=sk==='pf'?b/(B||1):sk==='st'?a/(A||1):(a+b)/((A+B)||1);
+    return `<button class="pc ${n?'got':''}" data-n="${n}" data-p="${p.n}"><b>${p.n}</b>${sk!=='pf'?`<span class="ln ${A?'':'z'}">${a}/${A}</span>`:''}${sk!=='st'?`<span class="ln pf ${B?'':'z'}">${b}/${B}</span>`:''}<span class="pb ${sk==='pf'?'pf':''}"><i style="width:${ratio*100}%"></i></span></button>`}).join('')}</div>`).join('')}
+  <p class="bk-note">● 緑：店舗　● 赤：ポケふた。ポケふたの設置場所・ポケモンは <a href="https://local.pokemon.jp/manhole/" target="_blank" rel="noopener">ポケモンローカルActs公式サイト</a> の掲載内容（${window.POKEFUTA_AT||''}取得、${TP}枚）をもとにしています。設置状況は変わることがあるため、お出かけ前に公式サイトをご確認ください。本アプリは非公式のファンメイドです。</p>`;
+  $('#book').querySelectorAll('.pc').forEach(b=>b.onclick=()=>{st.pref=b.dataset.p;if(st.mode==='simple')setMode('car');$('#pref').value=st.pref;setTab('map');st.sheet='half';applyFilter(true)});
+  $('#book').querySelectorAll('.stamps button').forEach(b=>b.onclick=()=>{const s=byId(b.dataset.id);if(st.kind!=='both'&&(st.kind==='pf')!==isPF(s))setKind('both');setTab('map');select(s,{pan:true,open:true})});
+  const bx=$('#bx');if(bx)bx.onclick=()=>setTab('map');
+}
+function setTab(t){st.tab=t;$('#book').classList.toggle('show',t==='book');if(t==='book'){renderBook();closeDetail()}
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  const sh=$('#sheet');if(sh)sh.style.display=t==='map'?'':'none';
+  if(t==='map')setTimeout(()=>map.invalidateSize(),0)}
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2600)}
+
+// ---------- controls ----------
+function fillPref(){const c=p=>st.kind==='st'?(PC[p]||0):st.kind==='pf'?(PCF[p]||0):(PC[p]||0)+(PCF[p]||0);$('#pref').innerHTML='<option value="">全国</option>'+PREFS.map(p=>`<option value="${p.n}">${p.n}（${c(p.n)}）</option>`).join('');$('#pref').value=st.pref}
+function setKind(k,msg){st.kind=k;try{localStorage.setItem('meguri-kind',k)}catch(e){}
+  const t=$('#kindSeg .seg3-t'),bs=[...document.querySelectorAll('#kindSeg button')],i=bs.findIndex(b=>b.dataset.k===k);t.dataset.i=i;t.className='seg3-t k-'+k;bs.forEach(b=>b.classList.toggle('on',b.dataset.k===k));
+  if(st.sel&&k!=='both'&&(k==='pf')!==isPF(st.sel))closeDetail();fillPref();applyFilter(false);if(st.tab==='book')renderBook();
+  if(msg)toast({both:'店舗とポケふたを表示',st:`店舗 ${st.list.length.toLocaleString()} 件を表示`,pf:`ポケふた ${st.list.length.toLocaleString()} 枚を表示`}[k])}
+document.querySelectorAll('#kindSeg button').forEach(b=>b.onclick=()=>setKind(b.dataset.k,true));
+fillPref();
+$('#pref').onchange=e=>{st.pref=e.target.value;closeDetail();if(st.pref&&st.mode==='simple')setMode('car');applyFilter(true)};
+document.querySelectorAll('#mode button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+document.querySelectorAll('#openSeg button').forEach((b,i)=>b.onclick=()=>{st.open=b.dataset.s;const t=$('#openSeg .seg3-t');t.dataset.i=i;t.className='seg3-t o-'+st.open;document.querySelectorAll('#openSeg button').forEach(x=>x.classList.toggle('on',x===b));applyFilter(false);toast({all:'すべて表示',open:`営業中の店舗とポケふた ${st.list.length.toLocaleString()} 件を表示`,closed:`営業時間外の店舗 ${st.list.length.toLocaleString()} 件を表示`}[st.open])});
+document.querySelectorAll('#stampSeg button').forEach((b,i)=>b.onclick=()=>{st.stamp=b.dataset.s;const t=$('#stampSeg .seg3-t');t.dataset.i=i;t.className='seg3-t s-'+st.stamp;document.querySelectorAll('#stampSeg button').forEach(x=>x.classList.toggle('on',x===b));applyFilter(false);toast({all:'すべて表示',got:`スタンプ取得済 ${st.list.length.toLocaleString()} 件`,not:`未取得 ${st.list.length.toLocaleString()} 件`}[st.stamp])});
+$('#loc').textContent='現在地: '+user.label;
+$('#locate').onclick=()=>{
+  const go=()=>{map.setView([user.lat,user.lng],Math.min(14,map.getMaxZoom()))};
+  if(!navigator.geolocation){toast('位置情報が使えないため仮の現在地を使用中');go();return}
+  navigator.geolocation.getCurrentPosition(p=>{user.lat=p.coords.latitude;user.lng=p.coords.longitude;user.label='取得済み';
+    me.eachLayer(l=>l.setLatLng([user.lat,user.lng]));calcDist();$('#loc').textContent='現在地: 取得済み';if(st.pref){st.pref='';$('#pref').value=''}applyFilter(false);go();toast('現在地から近い順に並べ替えました')},
+    ()=>{toast('位置情報を取得できないため、天王寺付近を現在地にしています');go()},{timeout:5000});
+};
+if(V==='c'){const b=document.createElement('button');b.className='bookbtn';b.innerHTML=`<i>${Object.keys(visited).length}</i>巡り帖`;b.onclick=()=>setTab('book');$('.brand').replaceChild(b,$('#loc'));
+  const l=document.createElement('span');l.className='loc';l.id='loc';l.textContent='現在地: '+user.label;l.style.cssText='display:none'; document.body.appendChild(l)}
+setMode(st.mode);
+setKind(st.kind);
+setTab(st.tab);
+setInterval(()=>{st.list.forEach(s=>s.m.setStyle(mstyle(s)))},60000);
+</script>
+<script src="osm.js?v=11"></script>
+<script src="transit.js?v=9"></script>
+<script src="layers.js?v=16"></script>
+<script src="sync-config.js?v=1"></script>
+<script src="sync.js?v=2"></script>
+<script src="route.js?v=4"></script>
+<script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
+</body>
+</html>
